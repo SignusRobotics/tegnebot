@@ -1,4 +1,4 @@
-# Tegnebot
+# Tegnebot 2017
 
 Code recovered from project report. Part of a group project. 
 
