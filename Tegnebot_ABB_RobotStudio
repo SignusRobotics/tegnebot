@@ -1,0 +1,1189 @@
+MODULE Module1
+    !definerer targets som blir brukt senere i koden, targetene blir brukt til å navigere rundt på Workobjektene, og når en ska tegne bokstaver
+    CONST robtarget Target_40:=[[0,0,0],[1,0,0,0],[0,0,-1,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    CONST robtarget Target_10:=[[0,0,0],[1,0,0,0],[0,0,-1,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    CONST robtarget Sentrum:=[[60,60,0],[1,0,0,0],[0,0,-1,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    CONST robtarget Target_20:=[[0,0,0],[1,0,0,0],[0,1,-3,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    CONST robtarget Target_30:=[[0,0,0],[0.707106781,0,0,0.707106781],[0,1,2,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    CONST robtarget Home:=[[30,23,-30],[1,0,0,0],[0,0,-1,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    CONST robtarget RobHome:=[[30,23,-100],[1,0,0,0],[0,0,-1,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    !Variabler for å koble til og motta melding fra putty
+    VAR string client_IP:="empty";
+    VAR string message:="empty";
+
+    VAR socketdev client;
+    VAR socketdev server;
+    
+    VAR string valg;
+
+    !Koble til Matlabkoden og motta melding fra denne:  
+    VAR string matlabmessage:="empty";
+    VAR string matlabclient_IP:="empty";
+    VAR socketdev matlabserver;
+    VAR socketdev matlabclient;
+
+    VAR string matlabTegne;
+    VAR string matlabRute;
+    VAR bool ok;
+    VAR num matlabRuteTall;
+
+    VAR string matlabRute2;
+    VAR bool ok2;
+    VAR num matlabRuteTall2;
+
+    VAR string matlabRute3;
+    VAR bool ok3;
+    VAR num matlabRuteTall3;
+
+    !variabler som brukes i FlexPed og SpillStart
+    VAR num spill;
+    VAR num start;
+    VAR num rad1;
+    VAR num rad2;
+    VAR num rad3;
+    VAR num svar;
+    VAR num SR; 
+    VAR num ledig{9}; !array til tictactoe brettet, 9 ruter.
+    VAR num plan_ant;
+    VAR num Fire;
+    VAR num Blomst;
+    VAR num HIOA;
+ 
+    VAR bool DobbelPlan:=FALSE; !styrer om roboten skal tegne på 1 eller 2 plan
+    VAR bool spiller:=TRUE; !styrer hvem sin tur det er (om roboten skal tegne X eller O i den ruta som er valgt).
+
+    PROC main()
+        !skrur configurations off for å unngå uønskede error meldinger
+        !starter FlexPed() som er hovudmenyen
+        ConfL\Off;
+        ConfJ\Off;
+        !Henter putty - bruker velger 
+        Communication;  
+
+
+         WHILE TRUE DO
+            SocketSend client\Str:="Hello client with ip-adress "+client_IP;
+            SocketSend client\Str:="Hvilket spill vil du spille? 1 = ";
+            TPWrite "Ready";
+            SocketReceive client\Str:=message;
+            TPWrite "Received:"+message;
+            !Her leses første tegn i meldingen fra putty. For å unngå feilmeldinger.  
+            valg:=StrPart(message,1,1);
+            !henter første tegn i meldingen som sendes fra putty.Måtte ha med denne for å at if skulle funke.
+            TPWrite "Meldingen som ble mottatt";
+            TPWrite message;
+
+
+            IF valg="1" THEN
+                TPWrite "Valg 1 starter: ";
+                FlexPed;
+            ELSEIF valg="2" THEN
+                TPWrite "Valg 2 starter ";
+                StartOCRTicTacToe;
+            ENDIF
+        ENDWHILE
+         
+        TPWrite "Closing connection...";
+        SocketClose client;
+        SocketClose server;
+        TPWrite ".....";
+        !ERROR
+        !    IF ERRNO=ERR_SOCK_CLOSED THEN
+        !        TPWrite "ERR_SOCK_CLOSED";
+        !        Stop;
+
+
+        
+        !    ELSEIF ERRNO=ERR_SOCK_TIMEOUT THEN
+        !        TPWrite "ERR_SOCK_TIMEOUT";
+        !        RETRY;
+        !    ENDIF
+    ENDPROC
+
+
+    PROC Communicationmatlab()
+
+        SocketCreate matlabserver;
+        !oppretter serversocket
+        !SocketBind matlabserver,"127.0.0.1",2345;
+        SocketBind matlabserver,"192.168.125.1", 2345;
+        !10.253.25.59
+        !Binder socket til ip-adresse og port
+        !127.0.0.1 fungerer for simulering; bruk 192.168.125.1 på roboten
+
+        SocketListen matlabserver;
+        !Starter lytting
+        TPWrite "Waiting for matlabcommunication";
+        !SocketAccept matlabserver,matlabclient\ClientAddress:=matlabclient_IP;
+        !Venter på forbindelse 
+        SocketAccept matlabserver,matlabclient\ClientAddress:=matlabclient_IP\Time:=WAIT_MAX;
+        TPWrite "Connect from "+matlabclient_IP+"...";
+    ENDPROC
+    
+    PROC Communication()
+        SocketCreate server;
+        !oppretter serversocket
+        !SocketBind server,"127.0.0.1",2222;
+        SocketBind server,"192.168.125.1",2222;
+        !Binder socket til ip-adresse og port
+        !127.0.0.1 fungerer for simulering; bruk 192.168.125.1 på roboten
+
+
+        SocketListen server;
+        !Starter lytting
+        TPWrite "Waiting for communication...!";
+        SocketAccept server,client\ClientAddress:=client_IP;
+        TPWrite "Connect from "+client_IP+"...";
+        TPWrite "Sending answer...";
+        
+    ENDPROC
+    
+    PROC CheckWinner()
+        !vinner algoritme som blir brukt for å sjekke vinneren i tictactoe.
+        !Koden sjekker om en vinnerrekke på 3 er fyllt, printer ut om det er en vinner
+        IF 
+            ledig{1}=1 AND ledig{2}=1 AND ledig{3}=1 OR 
+            ledig{4}=1 AND ledig{5}=1 AND ledig{6}=1 OR
+            ledig{7}=1 AND ledig{8}=1 AND ledig{9}=1 OR
+            ledig{1}=1 AND ledig{4}=1 AND ledig{7}=1 OR
+            ledig{2}=1 AND ledig{5}=1 AND ledig{8}=1 OR 
+            ledig{3}=1 AND ledig{6}=1 AND ledig{9}=1 OR
+            ledig{1}=1 AND ledig{5}=1 AND ledig{9}=1 OR 
+            ledig{3}=1 AND ledig{5}=1 AND ledig{7}=1 
+        THEN
+            TPWrite "Spiller X er vinner";
+            !setter en liten delay slik at brukeren får med seg at h*n har vunnet
+            WaitTime 5;
+            !bruker blir sendt tilbake til hovudmenyen
+            FlexPed;
+        ELSEIF 
+            ledig{1}=2 AND ledig{2}=2 AND ledig{3}=2 OR 
+            ledig{4}=2 AND ledig{5}=2 AND ledig{6}=2 OR
+            ledig{7}=2 AND ledig{8}=2 AND ledig{9}=2 OR 
+            ledig{1}=2 AND ledig{4}=2 AND ledig{7}=2 OR
+            ledig{2}=2 AND ledig{5}=2 AND ledig{8}=2 OR 
+            ledig{3}=2 AND ledig{6}=2 AND ledig{9}=2 OR
+            ledig{1}=2 AND ledig{5}=2 AND ledig{9}=2 OR 
+            ledig{3}=2 AND ledig{5}=2 AND ledig{7}=2 
+        THEN
+            TPWrite "Spiller O er vinner";
+            WaitTime 5;
+            FlexPed;
+        ENDIF
+    ENDPROC
+    
+    PROC CircleXZ(num x,num y)
+         
+        !en funksjon som tegner en sirkel, fra det gitte koordinatene, dette brukes til å representere spiller O.
+        MoveL offs(Target_30,x+20,y+10,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+20,y+10,0),v100,fine,pen\Wobj:=Workobject_2;
+        
+        MoveC offs(Target_30,x+30,y+20,0),offs(Target_30,x+20,y+30,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveC offs(Target_30,x+10,y+20,0),offs(Target_30,x+20,y+10,0),v100,fine,pen\WObj:=Workobject_2;
+    
+        MoveL offs(Target_30,x,y,-100),v100,fine,pen\WObj:=Workobject_2;
+        !funksjon for tegning av en sirkel på det hengende papiret 
+        
+    ENDPROC
+    
+    PROC CrossXZ(num x,num y)
+         
+        MoveL offs(Target_30,x+10,y+10,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+10,y+10,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+30,y+30,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+30,y+30,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+30,y+10,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+30,y+10,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+10,y+30,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+10,y+30,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x,y,-100),v100,fine,pen\WObj:=Workobject_2;
+    ENDPROC
+    
+    PROC EnDim()
+        !DobbelPlan er en variabel som styrer om roboten skal tegne på en eller flere plan,
+        !denne funksjonen setter den til false, altså at den tegner på en plan.
+        DobbelPlan:=FALSE;
+    ENDPROC
+
+
+    PROC HIOA1()
+        !for å skrive HIOA på plan 1 så kjøres proccene til bokstavene slik at roboten skriver det i riktig rekkefølge og koordinat (x,y) i planet
+        Letter_H1 50,30;
+        Letter_I1 80,30;
+        Letter_O1 110,30;
+        Letter_A1 150,30;
+    ENDPROC
+
+
+    PROC HIOA2()
+        !For å skrive HIOA på plan 2 så kjøres proc for å tegne di forskjellige bokstavene i riktig rekkefølge.
+        Letter_H2 50,30;
+        Letter_I2 80,30;
+        Letter_O2 110,30;
+        Letter_A2 150,30;
+    ENDPROC
+
+
+    PROC ToDim()
+        !hvis DobbelPlan er true så vil roboten tegne på to plan.
+        DobbelPlan:=TRUE;
+    ENDPROC
+
+
+    PROC Letter_H1(num x,num y)
+        MoveL offs(Target_40,x,y,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x,y,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x,y+40,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x,y+40,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+20,y,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+20,y,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+20,y+40,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+20,y+40,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x,y+20,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x,y+20,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+20,y+20,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+20,y+20,-10),v100,fine,pen\WObj:=Workobject_1;
+    ENDPROC
+
+
+    PROC Letter_H2(num x,num y)
+        MoveL offs(Target_30,x,y,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x,y,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x,y+40,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x,y+40,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+20,y,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+20,y,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+20,y+40,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+20,y+40,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x,y+20,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x,y+20,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+20,y+20,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+20,y+20,-10),v100,fine,pen\WObj:=Workobject_2;
+    ENDPROC
+
+
+    PROC Letter_I1(num x,num y)
+        MoveL offs(Target_40,x,y,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x,y,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+20,y,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+20,y,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+10,y,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+10,y,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+10,y+40,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+10,y+40,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x,y+40,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x,y+40,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+20,y+40,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+20,y+40,-10),v100,fine,pen\WObj:=Workobject_1;
+    ENDPROC
+
+
+    PROC Letter_I2(num x,num y)
+        MoveL offs(Target_30,x,y,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x,y,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+20,y,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+20,y,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+10,y,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+10,y,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+10,y+40,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+10,y+40,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x,y+40,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x,y+40,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+20,y+40,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+20,y+40,-10),v100,fine,pen\WObj:=Workobject_2;
+    ENDPROC
+
+
+    PROC Letter_O1(num x,num y)
+        !Funskjon som tegner "O" i det liggende papiret.
+        MoveL offs(Target_40,x+20,y,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+20,y,0),v100,fine,pen\Wobj:=Workobject_1;
+        MoveC offs(Target_40,x+40,y+20,0),offs(Target_40,x+20,y+40,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveC offs(Target_40,x,y+20,0),offs(Target_40,x+20,y,0),v100,fine,pen\WObj:=Workobject_1;
+    ENDPROC
+
+
+    PROC Letter_O2(num x,num y)
+        !Funksjon for å tegne O i det arket som henger.
+        MoveL offs(Target_30,x+20,y,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+20,y,0),v100,fine,pen\Wobj:=Workobject_2;
+        MoveC offs(Target_30,x+40,y+20,0),offs(Target_30,x+20,y+40,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveC offs(Target_30,x,y+20,0),offs(Target_30,x+20,y,0),v100,fine,pen\WObj:=Workobject_2;
+    ENDPROC
+
+
+    PROC Letter_A1(num x,num y)
+        !En funksjon som tegner bokstaven A, på papiret som ligger.
+        MoveL offs(Target_40,x+10,y,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+10,y,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x,y+40,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x,y+40,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+10,y,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+10,y,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+10,y,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+20,y+40,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+20,y+40,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+4,y+23,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+4,y+23,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+16,y+23,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+16,y+23,-10),v100,fine,pen\WObj:=Workobject_1;
+    ENDPROC
+
+
+    PROC Letter_A2(num x,num y)
+        !Funksjon som tegner bokstaven A,i det stående planet
+        MoveL offs(Target_30,x+10,y,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+10,y,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x,y+40,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x,y+40,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+10,y,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+10,y,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+10,y,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+20,y+40,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+20,y+40,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+4,y+23,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+4,y+23,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+16,y+23,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+16,y+23,-10),v100,fine,pen\WObj:=Workobject_2;
+
+
+    ENDPROC
+
+
+    PROC BlomstXY(num x,num y)
+        !!Funksjon som tegner passerblom på det liggende papiret.
+        MoveL offs(Target_40,x+20,y,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+20,y,0),v100,fine,pen\WObj:=Workobject_1;
+        Movec offs(Target_40,x+40,y+20,0),offs(Target_40,x+20,y+40,0),v100,fine,pen\WObj:=Workobject_1;
+        Movec offs(Target_40,x,y+20,0),offs(Target_40,x+20,y,0),v100,fine,pen\WObj:=Workobject_1;
+
+
+        MoveC offs(Target_40,x+20,y+20,0),offs(Target_40,x+5,y+33.2,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveC offs(Target_40,x+20,y+20,0),offs(Target_40,x+35,y+33.2,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveC offs(Target_40,x+20,y+20,0),offs(Target_40,x+20,y,0),v100,fine,pen\WObj:=Workobject_1;
+
+
+        MoveL offs(Target_40,x+20,y,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+20,y+40,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+20,y+40,0),v100,fine,pen\WObj:=Workobject_1;
+
+
+        MoveC offs(Target_40,x+20,y+20,0),offs(Target_40,x+33.2,y+5,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveC offs(Target_40,x+20,y+20,0),offs(Target_40,x+5,y+5,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveC offs(Target_40,x+20,y+20,0),offs(Target_40,x+20,y+40,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+20,y+40,-10),v100,fine,pen\WObj:=Workobject_1;
+
+
+    ENDPROC
+
+
+    PROC BlomstYZ(num x,num y)
+        !en passerblom på det stående arket
+        MoveL offs(Target_30,x+20,y,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+20,y,0),v100,fine,pen\WObj:=Workobject_2;
+        Movec offs(Target_30,x+40,y+20,0),offs(Target_30,x+20,y+40,0),v100,fine,pen\WObj:=Workobject_2;
+        Movec offs(Target_30,x,y+20,0),offs(Target_30,x+20,y,0),v100,fine,pen\WObj:=Workobject_2;
+
+
+        MoveC offs(Target_30,x+20,y+20,0),offs(Target_30,x+5,y+33.2,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveC offs(Target_30,x+20,y+20,0),offs(Target_30,x+35,y+33.2,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveC offs(Target_30,x+20,y+20,0),offs(Target_30,x+20,y,0),v100,fine,pen\WObj:=Workobject_2;
+
+
+        MoveL offs(Target_30,x+20,y,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+20,y+40,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+20,y+40,0),v100,fine,pen\WObj:=Workobject_2;
+
+
+        MoveC offs(Target_30,x+20,y+20,0),offs(Target_30,x+33.2,y+5,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveC offs(Target_30,x+20,y+20,0),offs(Target_30,x+5,y+5,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveC offs(Target_30,x+20,y+20,0),offs(Target_30,x+20,y+40,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+20,y+40,-10),v100,fine,pen\WObj:=Workobject_2;
+    ENDPROC
+
+
+    PROC Tegn_BrettXY(num x,num y)
+        !Tegner et 3x3 brett #
+        !z-verdi = -10 betyr penn opp, og z-verdi = 0 betyr penn ned 
+        MoveL offs(Target_10,x,y,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x,y+40,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x,y+40,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x+120,y+40,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x+120,y+40,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x+120,y+80,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x+120,y+80,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x+120,y+80,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x,y+80,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x,y+80,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x+40,y+120,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x+40,y+120,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x+40,y,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x+40,y,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x+80,y,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x+80,y,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x+80,y+120,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x,y+120,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x,y,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x+120,y,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x+120,y+120,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x+80,y+120,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_10,x+80,y+120,-10),v100,fine,pen\WObj:=Workobject_1;
+    ENDPROC
+    
+    
+    PROC Tegn_BrettXZ(num x,num y)
+        !Tegner et 3x3 brett #
+        !z-verdi = -10 betyr penn opp, og z-verdi = 0 betyr penn ned 
+        MoveL offs(Target_30,x,y,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x,y+40,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x,y+40,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+120,y+40,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+120,y+40,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+120,y+80,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+120,y+80,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+120,y+80,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x,y+80,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x,y+80,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+40,y+120,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+40,y+120,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+40,y,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+40,y,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+80,y,-10),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+80,y,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+80,y+120,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x,y+120,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x,y,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+120,y,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+120,y+120,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+80,y+120,0),v100,fine,pen\WObj:=Workobject_2;
+        MoveL offs(Target_30,x+80,y+120,-10),v100,fine,pen\WObj:=Workobject_2;
+    ENDPROC
+    
+    
+    PROC Spiller_O(num x,num y)
+        !en funksjon som tegner en sirkel, fra det gitte koordinatene, dette brukes til å representere spiller O.
+        MoveL offs(Target_40,x+20,y+10,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+20,y+10,0),v100,fine,pen\Wobj:=Workobject_1;
+        MoveC offs(Target_40,x+30,y+20,0),offs(Target_40,x+20,y+30,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveC offs(Target_40,x+10,y+20,0),offs(Target_40,x+20,y+10,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x,y,-100),v100,fine,pen\WObj:=Workobject_1;
+    ENDPROC
+
+
+    PROC Spiller_X(num x,num y)
+        !en funksjon som tegner et kryss, fra det gitte koordinatene, dette brukes til å representere spiller X.
+        MoveL offs(Target_40,x+10,y+10,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+10,y+10,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+30,y+30,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+30,y+30,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+30,y+10,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+30,y+10,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+10,y+30,0),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x+10,y+30,-10),v100,fine,pen\WObj:=Workobject_1;
+        MoveL offs(Target_40,x,y,-100),v100,fine,pen\WObj:=Workobject_1;
+    ENDPROC
+
+
+    PROC FlexPed()
+         
+        TPReadFK spill,"hvilket program vil du kjøre?",
+            "Start Tegning","TicTacToe Med Matlab","Spill","Velg Figur Som Skal Tegnes","Instill Dimensjoner";
+
+
+        IF spill=1 THEN
+                    !Tegner det brukeren har valgt
+                    !sjekke hva som er valgt av brukeren, også begynner den å tegne det brukeren har valgt.
+                    !sjekker brukeren har vært inne å stillt inn dimensjoner
+                    !hvis DobbelPlan er true, så vil den tegne en i hvert Wobj.
+                    !hvis ikke så tegner den på deault Wobj. og det er det arket som ligger.
+                    IF DobbelPlan=TRUE THEN
+                        IF HIOA=1 THEN
+                            HIOA1;
+                            HIOA2;
+                        ENDIF
+                        IF Blomst=1 THEN
+                            BlomstXY 80,80;
+                            BlomstYZ 80,80;
+                        ENDIF
+                     ELSEIF DobbelPlan=FALSE THEN
+
+
+                        IF HIOA=1 THEN
+                            HIOA1;
+                        ENDIF
+                        IF Blomst=1 THEN
+                            BlomstXY 80,80;
+                        ENDIF
+                    ENDIF
+                    Blomst:=0;
+                    HIOA:=0;
+                    MoveL RobHome,v100,fine,pen\Wobj:=Workobject_1;
+            FlexPed; !sender spilleren tilbake til menyen.
+        ELSEIF spill=2 THEN
+            !bruker vil spille tictactoe med matlab
+            StartOCRTicTacToe;
+            flexped;
+            
+
+        ELSEIF spill=3 THEN
+            ! Brukeren vil spille bondesjakk uten kamera, tegner opp brett og starter spillstart proc, som inneholder TicTacToe algoritmen
+            IF DobbelPlan = FALSE THEN 
+            Tegn_BrettXY 70,100;
+            SpillStart;
+            ELSEIF DobbelPlan = TRUE THEN
+               Tegn_BrettXY 70,100;
+               Tegn_BrettXZ 70,100;
+            SpillStart;
+            ENDIF
+        ELSEIF spill=4 THEN
+            TPReadFK Fire,"hva vil du tegne? bruk menyen flere ganger for å tegne flere ting.","Blomst","HIOA",stEmpty,stEmpty,"Tegn valgene mine";
+            !Spiller velger å tegne en blom
+            IF Fire=1 THEN
+                Blomst:=1;
+                !hvis Blomst er true så vil roboten huske på at brukeren vil tegne en blomst
+                FlexPed;
+            ENDIF
+
+            IF Fire=2 THEN
+                HIOA:=1;
+                !hvis HIOA er true så vet roboten at brukeren vil skrive HIOA
+                FlexPed;
+
+                ENDIF
+            ELSEIF spill=5 THEN
+            !Brukere får et valgt om han vil tegne i et eller begge plan
+                TPReadFK plan_ant,"Vil du tegne i et eller begge planer?",stEmpty,stEmpty,"En",stEmpty,"Begge";
+
+
+                IF plan_ant=3 THEN
+                    EnDim;
+                    flexped;
+                
+                ELSEIF plan_ant=5 THEN
+                    ToDim;
+                    flexped;
+                ENDIF
+        ENDIF 
+    ENDPROC
+
+
+
+    PROC SpillStart()
+
+        CheckWinner;
+        
+        TPReadFK start,"hvor vil du tegne?","1-3","4-6","7-9",stEmpty,"Jeg vil ikke spille";
+        !spiller velger en av 4 valg
+        FOR i FROM 1 TO 9 DO !siden det kun er 9 ruter, så sette for loopen en begrensning på anntall tur
+            !sjekker hvem sin tur det er. SR=True betyr at roboten tegner X
+            IF spiller = True THEN
+                
+                SR:=0;
+                spiller:=FALSE; !setter spiller = false, slik at den kommer inn i elseifen neste gang
+                
+            ELSEIF spiller = FALSE THEN
+                
+                SR:=1;
+                spiller:=TRUE;
+            ENDIF
+            
+            IF start=1 THEN
+                ! Spilleren har valgt å spille på 1-3
+                TPErase;
+                TPReadFK rad1,"Du har valgt å tegne i rute 1-3?","1","2","3",stEmpty,"Tilbake";
+                !rute1               
+                IF rad1=1 THEN
+                    
+                    IF ledig{1}=0 THEN !sjekker om det er ledig
+                     
+                        IF SR=0 THEN !sjekker hvem sin tur det er
+                            
+                            IF DobbelPlan=False THEN !sjekker om den den skal tegne et eller to steder
+                                
+                                Spiller_X 70+((rad1-1)*40),100+((start-1)*40); !tegner krysset på ønsket punkt: 20,20
+                                ledig{1}:=1; !setter ruta til opptatt
+                                SpillStart; !tilbake til spillstart
+                                
+                            ELSEIF DobbelPlan=TRUE THEN !sjekker om den skal tegne et eller to steder
+                                
+                                Spiller_X 70+((rad1-1)*40),100+((start-1)*40); !tegner
+                                CrossXZ 70+((rad1-1)*40),100+((start-1)*40); !tegner 
+                                ledig{1}:=1; !ruta er tatt
+                                SpillStart; !tilbake til start
+                            ENDIF
+                            
+                        ELSEIF SR=1 THEN !samme skjer om SR=1, eneste forskjell er at det blir tegner en O isteden for X
+                        
+                            IF DobbelPlan=FALSE THEN
+                                
+                                Spiller_O 70+((rad1-1)*40),100+((start-1)*40);
+                                ledig{1}:=2;
+                                SpillStart;
+                                
+                            ELSEIF DobbelPlan=TRUE THEN
+                                
+                                Spiller_O 70+((rad1-1)*40),100+((start-1)*40);
+                                CircleXZ 70+((rad1-1)*40),100+((start-1)*40);
+                                ledig{1}:=2;
+                                SpillStart;
+                            ENDIF
+                        ENDIF
+                
+                    ELSEIF ledig{1}>0 AND SR=0 THEN
+                        
+                        TPWrite "Prøv en anen rute.";
+                        spiller:=TRUE;
+                        Waittime 4;
+                        SpillStart;
+                        
+                    ELSEIF ledig{1}>0 AND SR=1 THEN
+                        
+                        TPWrite "Prøv en anen rute.";
+                        spiller:=FALSE;
+                        Waittime 4;
+                        SpillStart;
+                    ENDIF
+
+
+                !rute 2
+                ELSEIF rad1=2 THEN
+                    
+                   IF ledig{2}=0 THEN !sjekker om det er ledig
+                     
+                        IF SR=0 THEN !sjekker hvem sin tur det er
+                            
+                            IF DobbelPlan=False THEN !sjekker om den den skal tegne et eller to steder
+                                
+                                Spiller_X 70+((rad1-1)*40),100+((start-1)*40); !tegner krysset på ønsket punkt: 60,20
+                                ledig{2}:=1; !setter ruta til opptatt
+                                SpillStart; !tilbake til spillstart
+                                
+                            ELSEIF DobbelPlan=TRUE THEN !sjekker om den skal tegne et eller to steder
+                                
+                                Spiller_X 70+((rad1-1)*40),100+((start-1)*40); !tegner
+                                CrossXZ 70+((rad1-1)*40),100+((start-1)*40); !tegner 
+                                ledig{2}:=1; !ruta er tatt
+                                SpillStart; !tilbake til start
+                            ENDIF
+                            
+                        ELSEIF SR=1 THEN !samme skjer om SR=1, eneste forskjell er at det blir tegner en O isteden for X
+                        
+                            IF DobbelPlan=FALSE THEN
+                                
+                                Spiller_O 70+((rad1-1)*40),100+((start-1)*40);
+                                ledig{2}:=2;
+                                SpillStart;
+                                
+                            ELSEIF DobbelPlan=TRUE THEN
+                                
+                                Spiller_O 70+((rad1-1)*40),100+((start-1)*40);
+                                CircleXZ 70+((rad1-1)*40),100+((start-1)*40);
+                                ledig{2}:=2;
+                                SpillStart;
+                            ENDIF
+                        ENDIF
+                        
+                    ELSEIF ledig{2}>0 AND SR=0 THEN
+                        
+                        TPWrite "Prøv en anen rute.";
+                        spiller:=TRUE;
+                        Waittime 4;
+                        SpillStart;
+                        
+                    ELSEIF ledig{2}>0 AND SR=1 THEN
+                        
+                        TPWrite "Prøv en anen rute.";
+                        spiller:=FALSE;
+                        Waittime 4;
+                        SpillStart;
+                    ENDIF
+
+
+                !rute 3
+                ELSEIF rad1=3 THEN
+
+
+                    IF ledig{3}=0 THEN !sjekker om det er ledig
+                     
+                        IF SR=0 THEN !sjekker hvem sin tur det er
+                            
+                            IF DobbelPlan=False THEN !sjekker om den den skal tegne et eller to steder
+                                
+                                Spiller_X 70+((rad1-1)*40),100+((start-1)*40); !tegner krysset på ønsket punkt: 100,20
+                                ledig{3}:=1; !setter ruta til opptatt
+                                SpillStart; !tilbake til spillstart
+                                
+                            ELSEIF DobbelPlan=TRUE THEN !sjekker om den skal tegne et eller to steder
+                                
+                                Spiller_X 70+((rad1-1)*40),100+((start-1)*40); !tegner
+                                CrossXZ 70+((rad1-1)*40),100+((start-1)*40); !tegner 
+                                ledig{3}:=1; !ruta er tatt
+                                SpillStart; !tilbake til start
+                            ENDIF
+                            
+                        ELSEIF SR=1 THEN !samme skjer om SR=1, eneste forskjell er at det blir tegner en O isteden for X
+                        
+                            IF DobbelPlan=FALSE THEN
+                                
+                                Spiller_O 70+((rad1-1)*40),100+((start-1)*40);
+                                ledig{3}:=2;
+                                SpillStart;
+                                
+                            ELSEIF DobbelPlan=TRUE THEN
+                                
+                                Spiller_O 70+((rad1-1)*40),100+((start-1)*40);
+                                CircleXZ 70+((rad1-1)*40),100+((start-1)*40);
+                                ledig{3}:=2;
+                                SpillStart;
+                            ENDIF
+                        ENDIF
+ 
+                    ELSEIF ledig{3}>0 AND SR=0 THEN
+                        
+                        TPWrite "Prøv en anen rute.";
+                        spiller:=TRUE;
+                        Waittime 4;
+                        SpillStart;
+                        
+                    ELSEIF ledig{3}>0 AND SR=1 THEN
+                        
+                        TPWrite "Prøv en anen rute.";
+                        Waittime 4;
+                        spiller:=FALSE;
+                        SpillStart;
+                        
+                    ENDIF
+                    
+                ELSEIF rad1=5 THEN
+                    
+                    SpillStart; !spilleren valgte feil, og vil velge på nytt.
+                ENDIF
+
+
+            ELSEIF start=2 THEN
+                ! vil tegne på rute 4-6
+                TPErase;
+                TPReadFK rad2,"du har valgt å tegne i rute 4-6?","4","5","6",stEmpty,"Tilbake";
+
+
+                !rute 4    
+                IF rad2=1 THEN !obs: rad2 som gjelder og ikke rad1
+                    
+                    IF ledig{4}=0 THEN !sjekker om det er ledig
+                     
+                        IF SR=0 THEN !sjekker hvem sin tur det er
+                            
+                            IF DobbelPlan=False THEN !sjekker om den den skal tegne et eller to steder
+                                
+                                Spiller_X 70+((rad2-1)*40),100+((start-1)*40);!tegner krysset på ønsket punkt: 20,60
+                                ledig{4}:=1; !setter ruta til opptatt
+                                SpillStart; !tilbake til spillstart
+                                
+                            ELSEIF DobbelPlan=TRUE THEN !sjekker om den skal tegne et eller to steder
+                                
+                                Spiller_X 70+((rad2-1)*40),100+((start-1)*40); !tegner
+                                CrossXZ 70+((rad2-1)*40),100+((start-1)*40); !tegner 
+                                ledig{4}:=1; !ruta er tatt
+                                SpillStart; !tilbake til start
+                            ENDIF
+                            
+                        ELSEIF SR=1 THEN !samme skjer om SR=1, eneste forskjell er at det blir tegner en O isteden for X
+                        
+                            IF DobbelPlan=FALSE THEN
+                                
+                                Spiller_O 70+((rad2-1)*40),20+((start-1)*40);
+                                ledig{4}:=2;
+                                SpillStart;
+                                
+                            ELSEIF DobbelPlan=TRUE THEN
+                                
+                                Spiller_O 70+((rad2-1)*40),100+((start-1)*40);
+                                CircleXZ 70+((rad2-1)*40),100+((start-1)*40);
+                                ledig{4}:=2;
+                                SpillStart;
+                            ENDIF
+                        ENDIF
+                        
+                    ELSEIF ledig{4}>0 AND SR=0 THEN
+                        
+                        TPWrite "Prøv en anen rute.";
+                        spiller:=TRUE;
+                        Waittime 4;
+                        SpillStart;
+                        
+                    ELSEIF ledig{4}>0 AND SR=1 THEN
+                        
+                        TPWrite "Prøv en anen rute.";
+                        spiller:=FALSE;
+                        Waittime 4;
+                        SpillStart;
+                        
+                    ENDIF
+
+
+                !rute 5                       
+                ELSEIF rad2=2 THEN
+                    
+                    IF ledig{5}=0 THEN !sjekker om det er ledig
+                     
+                        IF SR=0 THEN !sjekker hvem sin tur det er
+                            
+                            IF DobbelPlan=False THEN !sjekker om den den skal tegne et eller to steder
+                                
+                                Spiller_X 70+((rad2-1)*40),100+((start-1)*40); !tegner krysset på ønsket punkt: 60,60
+                                ledig{5}:=1; !setter ruta til opptatt
+                                SpillStart; !tilbake til spillstart
+                                
+                            ELSEIF DobbelPlan=TRUE THEN !sjekker om den skal tegne et eller to steder
+                                
+                                Spiller_X 70+((rad2-1)*40),100+((start-1)*40); !tegner
+                                CrossXZ 70+((rad2-1)*40),100+((start-1)*40); !tegner 
+                                ledig{5}:=1; !ruta er tatt
+                                SpillStart; !tilbake til start
+                            ENDIF
+                            
+                        ELSEIF SR=1 THEN !samme skjer om SR=1, eneste forskjell er at det blir tegner en O isteden for X
+                        
+                            IF DobbelPlan=FALSE THEN
+                                
+                                Spiller_O 70+((rad2-1)*40),100+((start-1)*40);
+                                ledig{5}:=2;
+                                SpillStart;
+                                
+                            ELSEIF DobbelPlan=TRUE THEN
+                                
+                                Spiller_O 70+((rad2-1)*40),100+((start-1)*40);
+                                CircleXZ 70+((rad2-1)*40),100+((start-1)*40);
+                                ledig{5}:=2;
+                                SpillStart;
+                            ENDIF
+                        ENDIF
+                        
+                    ELSEIF ledig{5}>0 AND SR=0 THEN
+                        
+                        TPWrite "Prøv en anen rute.";
+                        spiller:=TRUE;
+                        Waittime 4;
+                        SpillStart;
+                        
+                    ELSEIF ledig{5}>0 AND SR=1 THEN
+                        
+                        TPWrite "Prøv en anen rute.";
+                        spiller:=FALSE;
+                        Waittime 4;
+                        SpillStart;
+                    ENDIF
+
+
+                !rute 6  
+                ELSEIF rad2=3 THEN
+                    
+                    IF ledig{6}=0 THEN !sjekker om det er ledig
+                     
+                        IF SR=0 THEN !sjekker hvem sin tur det er
+                            
+                            IF DobbelPlan=False THEN !sjekker om den den skal tegne et eller to steder
+                                
+                                Spiller_X 70+((rad2-1)*40),100+((start-1)*40); !tegner krysset på ønsket punkt: 100,60
+                                ledig{6}:=1; !setter ruta til opptatt
+                                SpillStart; !tilbake til spillstart
+                                
+                            ELSEIF DobbelPlan=TRUE THEN !sjekker om den skal tegne et eller to steder
+                                
+                                Spiller_X 70+((rad2-1)*40),100+((start-1)*40); !tegner
+                                CrossXZ 70+((rad2-1)*40),100+((start-1)*40); !tegner 
+                                ledig{6}:=1; !ruta er tatt
+                                SpillStart; !tilbake til start
+                            ENDIF
+                            
+                        ELSEIF SR=1 THEN !samme skjer om SR=1, eneste forskjell er at det blir tegner en O isteden for X
+                        
+                            IF DobbelPlan=FALSE THEN
+                                
+                                Spiller_O 70+((rad2-1)*40),100+((start-1)*40);
+                                ledig{6}:=2;
+                                SpillStart;
+                                
+                            ELSEIF DobbelPlan=TRUE THEN
+                                
+                                Spiller_O 70+((rad2-1)*40),100+((start-1)*40);
+                                CircleXZ 70+((rad2-1)*40),100+((start-1)*40);
+                                ledig{6}:=2;
+                                SpillStart;
+                            ENDIF
+                        ENDIF
+                        
+                    ELSEIF ledig{6}>0 AND SR=0 THEN
+                        
+                        TPWrite "Prøv en anen rute.";
+                        spiller:=TRUE;
+                        Waittime 4;
+                        SpillStart;
+                        
+                    ELSEIF ledig{6}>0 AND SR=1 THEN
+                        
+                        TPWrite "Prøv en anen rute.";
+                        Waittime 4;
+                        spiller:=FALSE;
+                        SpillStart;
+                        
+                    ENDIF
+                    
+                ELSEIF rad2=5 THEN
+                    SpillStart;
+                ENDIF
+
+
+            ELSEIF start=3 THEN
+                ! vil tegne på rute 7-9
+                TPErase;
+                TPReadFK rad3,"du har valgt å tegne i rute 7-9?","7","8","9",stEmpty,"Tilbake";
+
+
+                !rute 7       
+                IF rad3=1 THEN !obs: rad3 gjelder og ikke rad2
+                
+                    IF ledig{7}=0 THEN !sjekker om det er ledig
+                     
+                        IF SR=0 THEN !sjekker hvem sin tur det er
+                            
+                            IF DobbelPlan=False THEN !sjekker om den den skal tegne et eller to steder
+                                
+                                Spiller_X 70+((rad3-1)*40),100+((start-1)*40);!tegner krysset på ønsket punkt: 20,100
+                                ledig{7}:=1; !setter ruta til opptatt
+                                SpillStart; !tilbake til spillstart
+                                
+                            ELSEIF DobbelPlan=TRUE THEN !sjekker om den skal tegne et eller to steder
+                                
+                                Spiller_X 70+((rad3-1)*40),100+((start-1)*40);!tegner
+                                CrossXZ 70+((rad3-1)*40),100+((start-1)*40);!tegner 
+                                ledig{7}:=1; !ruta er tatt
+                                SpillStart; !tilbake til start
+                            ENDIF
+                            
+                        ELSEIF SR=1 THEN !samme skjer om SR=1, eneste forskjell er at det blir tegner en O isteden for X
+                        
+                            IF DobbelPlan=FALSE THEN
+                                
+                                Spiller_O 70+((rad3-1)*40),100+((start-1)*40);
+                                ledig{7}:=2;
+                                SpillStart;
+                                
+                            ELSEIF DobbelPlan=TRUE THEN
+                                
+                                Spiller_O 70+((rad3-1)*40),100+((start-1)*40);
+                                CircleXZ 70+((rad3-1)*40),100+((start-1)*40);
+                                ledig{7}:=2;
+                                SpillStart;
+                            ENDIF
+                        ENDIF
+
+
+                    ELSEIF ledig{7}>0 AND SR=0 THEN
+                        
+                        TPWrite "Prøv en anen rute.";
+                        spiller:=TRUE;
+                        Waittime 4;
+                        SpillStart;
+                        
+                    ELSEIF ledig{7}>0 AND SR=1 THEN
+                        
+                        TPWrite "Prøv en anen rute.";
+                        spiller:=FALSE;
+                        Waittime 4;
+                        SpillStart;
+                    ENDIF
+
+
+                !rute 8
+                ELSEIF rad3=2 THEN
+                    
+                    IF ledig{8}=0 THEN !sjekker om det er ledig
+                     
+                        IF SR=0 THEN !sjekker hvem sin tur det er
+                            
+                            IF DobbelPlan=False THEN !sjekker om den den skal tegne et eller to steder
+                                
+                                Spiller_X 70+((rad3-1)*40),100+((start-1)*40);!tegner krysset på ønsket punkt: 60,100
+                                ledig{8}:=1; !setter ruta til opptatt
+                                SpillStart; !tilbake til spillstart
+                                
+                            ELSEIF DobbelPlan=TRUE THEN !sjekker om den skal tegne et eller to steder
+                                
+                                Spiller_X 70+((rad3-1)*40),100+((start-1)*40);!tegner
+                                CrossXZ 70+((rad3-1)*40),100+((start-1)*40);!tegner 
+                                ledig{8}:=1; !ruta er tatt
+                                SpillStart; !tilbake til start
+                            ENDIF
+                            
+                        ELSEIF SR=1 THEN !samme skjer om SR=1, eneste forskjell er at det blir tegner en O isteden for X
+                        
+                            IF DobbelPlan=FALSE THEN
+                                
+                                Spiller_O 70+((rad3-1)*40),100+((start-1)*40);
+                                ledig{8}:=2;
+                                SpillStart;
+                                
+                            ELSEIF DobbelPlan=TRUE THEN
+                                
+                                Spiller_O 70+((rad3-1)*40),100+((start-1)*40);
+                                CircleXZ 70+((rad3-1)*40),100+((start-1)*40);
+                                ledig{8}:=2;
+                                SpillStart;
+                            ENDIF
+                        ENDIF
+                        
+                    ELSEIF ledig{8}>0 AND SR=0 THEN
+                        
+                        TPWrite "Prøv en anen rute.";
+                        spiller:=TRUE;
+                        Waittime 4;
+                        SpillStart;
+                        
+                    ELSEIF ledig{8}>0 AND SR=1 THEN
+
+
+                        TPWrite "Prøv en anen rute.";
+                        Waittime 4;
+                        spiller:=FALSE;
+                        SpillStart;
+                    ENDIF
+
+
+                !rute 9
+                ELSEIF rad3=3 THEN
+                    
+                    IF ledig{9}=0 THEN !sjekker om det er ledig
+                     
+                        IF SR=0 THEN !sjekker hvem sin tur det er
+                            
+                            IF DobbelPlan=False THEN !sjekker om den den skal tegne et eller to steder
+                                
+                                Spiller_X 70+((rad3-1)*40),100+((start-1)*40);!tegner krysset på ønsket punkt: 20,100
+                                ledig{9}:=1; !setter ruta til opptatt
+                                SpillStart; !tilbake til spillstart
+                                
+                            ELSEIF DobbelPlan=TRUE THEN !sjekker om den skal tegne et eller to steder
+                                
+                                Spiller_X 70+((rad3-1)*40),100+((start-1)*40);!tegner
+                                CrossXZ 70+((rad3-1)*40),100+((start-1)*40);!tegner 
+                                ledig{9}:=1; !ruta er tatt
+                                SpillStart; !tilbake til start
+                            ENDIF
+                            
+                        ELSEIF SR=1 THEN !samme skjer om SR=1, eneste forskjell er at det blir tegner en O isteden for X
+                        
+                            IF DobbelPlan=FALSE THEN
+                                
+                                Spiller_O 70+((rad3-1)*40),100+((start-1)*40);
+                                ledig{9}:=2;
+                                SpillStart;
+                                
+                            ELSEIF DobbelPlan=TRUE THEN
+                                
+                                Spiller_O 70+((rad3-1)*40),100+((start-1)*40);
+                                CircleXZ 70+((rad3-1)*40),100+((start-1)*40);
+                                ledig{9}:=2;
+                                SpillStart;
+                            ENDIF
+                        ENDIF
+
+
+                    ELSEIF ledig{9}>0 AND SR=0 THEN
+                        
+                        TPWrite "Prøv en anen rute.";
+                        spiller:=TRUE;
+                        Waittime 4;
+                        SpillStart;
+                        
+                    ELSEIF ledig{9}>0 AND SR=1 THEN
+                        
+                        TPWrite "Prøv en anen rute.";
+                        spiller:=FALSE;
+                        Waittime 4;
+                        SpillStart;
+                    ENDIF
+                ELSEIF rad3=5 THEN
+                    SpillStart;
+            ENDIF
+
+
+            ELSEIF start=5 THEN
+                TPErase;
+                FlexPed;
+            ENDIF
+        ENDFOR
+    ENDPROC
+    
+    PROC StartOCRTicTacToe()
+        !Tegner 3x3 brett, og starter kommunikasjon med matlab.
+        
+        IF DobbelPlan= FALSE THEN
+            
+            Tegn_BrettXZ 20,20;
+            
+        ELSEIF DobbelPlan= TRUE THEN 
+            Tegn_BrettXY 20,20;
+            Tegn_BrettXZ 20,20;
+            
+        ENDIF
+        
+        Communicationmatlab;
+        
+        WHILE TRUE DO
+            SocketReceive matlabclient\Str:=matlabmessage;
+            TPWrite "Received:"+matlabmessage;
+
+
+            !Rad
+            matlabTegne:=StrPart(matlabmessage,1,1);
+            matlabRute:=StrPart(matlabmessage,2,1);
+            ok:=StrToVal(matlabRute,matlabRuteTall);
+            !Kolonne
+            matlabRute2:=StrPart(matlabmessage,3,1);
+            ok2:=StrToVal(matlabRute2,matlabRuteTall2);
+
+
+            !Henter ut rutenr. 
+            matlabRute3:=StrPart(matlabmessage,4,1);
+            ok3:=StrToVal(matlabRute3,matlabRuteTall3);
+            !Tegner
+         
+            IF matlabTegne="x" THEN
+                
+                IF DobbelPlan = FALSE THEN 
+                    
+                CrossXZ 20+matlabRuteTall2*40,20+matlabRuteTall*40;
+                ledig{matlabRuteTall3}:=1;
+                CheckWinner;
+                ELSEIF DobbelPlan = TRUE THEN
+                    
+                CrossXZ 20+matlabRuteTall2*40,20+matlabRuteTall*40;
+                Spiller_X 20+matlabRuteTall2*40,20+matlabRuteTall*40;
+                ledig{matlabRuteTall3}:=1;
+                CheckWinner;
+                ENDIF
+                
+            ELSEIF matlabTegne="o" THEN
+                
+                IF DobbelPlan = FALSE THEN 
+                    
+                    CircleXZ 20+matlabRuteTall2*40,20+matlabRuteTall*40;
+                    ledig{matlabRuteTall3}:=2;
+                    CheckWinner;
+                    
+                ELSEIF DobbelPlan = TRUE THEN
+                    
+                    CircleXZ 20+matlabRuteTall2*40,20+matlabRuteTall*40;
+                    Spiller_O 20+matlabRuteTall2*40,20+matlabRuteTall*40;
+                    ledig{matlabRuteTall3}:=2;
+                    CheckWinner;   
+                ENDIF
+            ENDIF
+        ENDWHILE
+        !Lukker
+        SocketClose matlabclient;
+        SocketClose matlabserver;
+    ENDPROC
+    
+ENDMODULE
